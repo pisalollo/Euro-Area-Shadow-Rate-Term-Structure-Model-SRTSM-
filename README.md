@@ -19,7 +19,7 @@ The architecture is built upon three foundational papers in term structure model
 
 ## Data
 Currently, the model runs on the **Euro Area AAA Government Yield Curve** (maturities: 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y). 
-*Note: Because AAA bonds carry a strong convenience yield/scarcity premium due to ECB asset purchases, the estimated ELB naturally sits deeper (e.g., -80 bps) compared to OIS/EONIA curves.*
+* Note: The original model relies on EONIA OIS curves. Since full historical OIS term structures are not freely available via public ECB databases (which only provide the discontinued overnight EONIA rate), this implementation currently uses the closest available proxy data to replicate the risk-free yield curve.
 
 ## Work In Progress / Future Steps
 This is an active research project. Upcoming implementations include:
