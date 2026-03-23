@@ -357,3 +357,82 @@ xlabel('Scadenze (mesi)'); ylabel('Rendimento (%)');
 legend('Curva Osservata', 'Modello JSZ', 'Location', 'best');
 grid on;
 
+
+% =========================================================================
+%%  6. GRID SEARCH PER IL LOWER BOUND E ESTRAZIONE STATI LATENTI
+% =========================================================================
+
+fprintf('\n--- Inizio Grid Search per r_LB (Scala Decimale Mensile) ---\n');
+
+% 1. Convertiamo in Decimale Mensile TUTTI gli input del filtro
+yields_LB_dec = yields_LB / 1200; %Yields_LB
+
+r_LB_grid_bps = -120:10:0; %il Deposit Facility rate storicamente è sceso sotto lo zero in area euro, escludo quindi che il lower bound sia positivo 
+r_LB_grid_dec = (r_LB_grid_bps / 10000) / 12;
+
+sigma_e_dec = sigma_e_bps / 10000 / 12; 
+R_mat_dec = eye(length(maturities)) * (sigma_e_dec^2);
+
+logL_results = zeros(length(r_LB_grid_bps), 1);
+
+% Parametri P in scala decimale (fix)
+Phi_P = A_AR;   
+mu_P_dec  = KP0 / 1200; 
+
+% Stati iniziali rigorosamente in decimale
+idx_preLB = sum(dates_monthly <= date_split);
+P_init_dec = factors_all(idx_preLB, :)' / 1200; 
+%V_init = eye(3) * 1e-6; non so quale sia meglio come tolleranza da
+%testare, approfondire
+V_init = eye(3) * 1e-3;
+
+% Lanciamo il ciclo usando Sigma_dec (Blocco 4)
+for i = 1:length(r_LB_grid_bps)
+    current_rLB_dec = r_LB_grid_dec(i);
+    fprintf('Testando r_LB = %3d bps... ', r_LB_grid_bps(i));
+    
+    [logL, ~] = latent_run_EKF_shadow(yields_LB_dec, P_init_dec, V_init, mu_P_dec, ...
+                Phi_P, Sigma_dec, K0_Q, K1_Q, rho0, rho1, current_rLB_dec, maturities, R_mat_dec);
+                        
+    logL_results(i) = logL;
+    fprintf('Log-Likelihood: %.4f\n', logL);
+end
+
+[~, idx_opt] = max(logL_results);
+r_LB_opt_bps = r_LB_grid_bps(idx_opt);
+r_LB_opt_dec = r_LB_grid_dec(idx_opt); 
+
+fprintf('\n=== RISULTATO OTTIMIZZAZIONE LOWER BOUND ===\n');
+fprintf('Il Lower Bound (r_LB) ottimale stimato è: %d bps\n', r_LB_opt_bps);
+
+fprintf('\nRicalcolo l''EKF con il Lower Bound ottimale (%d bps)...\n', r_LB_opt_bps);
+[~, P_latenti_ottimali_dec] = latent_run_EKF_shadow(yields_LB_dec, P_init_dec, V_init, mu_P_dec, ...
+                Phi_P, Sigma_dec, K0_Q, K1_Q, rho0, rho1, r_LB_opt_dec, maturities, R_mat_dec);
+
+figure('Name', 'Log-Likelihood r_LB');
+plot(r_LB_grid_bps, logL_results, 'bo-', 'MarkerFaceColor', 'b');
+xline(r_LB_opt_bps, 'r--', 'LineWidth', 1.5);
+title('Log-Likelihood al variare del Lower Bound');
+xlabel('r_{LB} (basis points)'); ylabel('Log-likelihood');
+grid on;
+
+
+%=== RISULTATO OTTIMIZZAZIONE LOWER BOUND ===
+% Il Lower Bound (r_LB) ottimale stimato è: -70 bps
+% Ricalcolo l'EKF con il Lower Bound ottimale (-70 bps)...
+
+
+
+% =========================================================================
+% FORZATURA DEL LOWER BOUND (Test ad esempio 0lb di Wu-Xia ZLB) vedere se
+% lo shadow rate esplode in negativo mettendo dei LB irrealistici
+% =========================================================================
+%r_LB_opt_bps = -65; % Imponiamo un pavimento a 0 bps (oppure metti 25)
+%r_LB_opt_dec = (r_LB_opt_bps / 10000) / 12; % Riconvertiamo in decimale
+%r_LB_opt_pct = r_LB_opt_bps / 100;          % Riconvertiamo in percentuale
+
+%fprintf('\nATTENZIONE: Forzo il Lower Bound a %d bps per testare lo Shadow Rate!\n', r_LB_opt_bps);
+
+% Ora lanciamo l'EKF finale che estrarrà i fattori basandosi su questo LB finto!
+%[~, P_latenti_ottimali_dec] = latent_run_EKF_shadow(yields_LB_dec, P_init_dec, V_init, mu_P_dec, ...
+%                Phi_P, Sigma_dec, K0_Q, K1_Q, rho0, rho1, r_LB_opt_dec, maturities, R_mat_dec);
