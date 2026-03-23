@@ -461,7 +461,7 @@ r_LB_opt_pct = r_LB_opt_bps / 100;
 % r_t=max(r_LB,s_t)
 short_rate_model_pct = max(shadow_rate_vero_pct, r_LB_opt_pct);
 
-figure('Name', 'VERO Shadow Rate (Latente)', 'Position', [100, 100, 800, 500]);
+figure('Name', 'Shadow Rate (Latent)', 'Position', [100, 100, 800, 500]);
 
 % A. Disegniamo le curve del modello
 plot(dates_monthly, yields_all(:,1), 'k-', 'LineWidth', 1.5); hold on;
@@ -473,16 +473,16 @@ yline(r_LB_opt_pct, 'g-', 'LineWidth', 2, 'Label', sprintf('Lower Bound (%.0f bp
 yline(0, 'k:', 'LineWidth', 1); 
 xline(date_split, 'm--', 'LineWidth', 1.5, 'Label', 'Inizio Filtro EKF');
 
-title('VERO Shadow Rate (Fattori EKF) vs Tasso Osservato');
-legend('Tasso Osservato (3M AAA)', 'Shadow Rate Libero (s_t)', ...
-       'Tasso Troncato Modello (max(s_t, r_{LB}))', 'Location', 'best');
+title('Shadow Rate (EKF factors) vs Observed Rate');
+legend('Observed Rate (3M AAA)', 'Shadow Rate (s_t)', ...
+       'Model Rate (max(s_t, r_{LB}))', 'Location', 'best');
 ylabel('Rendimento (%)');
 grid on;
 
 % Sovrapponiamo altre variabili macro cruciali per contestualizzare lo Shadow Rate.
 
 % 1. Il tasso a 10 anni (yields_all(:,8))
-plot(dates_monthly, yields_all(:,8), 'Color', [0.5 0.5 0.5], 'LineWidth', 1, 'DisplayName', 'Tasso 10Y AAA');
+plot(dates_monthly, yields_all(:,8), 'Color', [0.5 0.5 0.5], 'LineWidth', 1, 'DisplayName', '10Y AAA');
 
 % 2. ECB Deposit Facility Rate (DFR)
 ecb_df = readmatrix("ecb_df.xlsx","Range", "B2:B260");

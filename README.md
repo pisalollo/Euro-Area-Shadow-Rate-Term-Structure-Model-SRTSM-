@@ -5,6 +5,8 @@ This repository contains a MATLAB implementation of a Shadow Rate Term Structure
 ##  Project Overview
 The model extracts the shadow rate by combining a baseline affine term structure model with a non-linear Extended Kalman Filter (EKF). It is designed to handle deep negative interest rates and structural shifts in the yield curve caused by unconventional monetary policies (like QE and forward guidance).
 
+![image](shadow_rate.png)
+
 ### Core Methodology
 The architecture is built upon three foundational papers in term structure modeling:
 1. **Joslin, Singleton, and Zhu (2011)**: Used for the baseline linear Affine Term Structure Model (ATSM) estimation and risk-neutral ($\mathbb{Q}$) parameter rotation.
