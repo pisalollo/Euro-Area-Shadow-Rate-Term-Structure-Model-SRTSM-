@@ -436,3 +436,64 @@ grid on;
 % Ora lanciamo l'EKF finale che estrarrà i fattori basandosi su questo LB finto!
 %[~, P_latenti_ottimali_dec] = latent_run_EKF_shadow(yields_LB_dec, P_init_dec, V_init, mu_P_dec, ...
 %                Phi_P, Sigma_dec, K0_Q, K1_Q, rho0, rho1, r_LB_opt_dec, maturities, R_mat_dec);
+
+% =========================================================================
+%%  7. ESTRAZIONE E PLOT DEL VERO SHADOW RATE (Fattori EKF)
+% =========================================================================
+
+fprintf('\n--- Estrazione e Plot del VERO Shadow Rate (Fattori Latenti) ---\n');
+
+% Splicing fattori: unione dei fattori in decimale, pre LB e post LB
+% estratti dal filtro
+
+factors_preLB_dec = factors_all(1:idx_preLB, :) / 1200; 
+P_history_true_dec = [factors_preLB_dec; P_latenti_ottimali_dec];
+
+% Calcoliamo lo shadow rate in decimale
+% (s_t = rho0 + rho1 * P_t)
+shadow_rate_vero_dec = rho0 + P_history_true_dec * rho1;
+
+% Riconverto alla fine in percentuale per il grafico
+shadow_rate_vero_pct = shadow_rate_vero_dec * 1200;
+r_LB_opt_pct = r_LB_opt_bps / 100;
+
+% Il tasso "fisico" (modello) è semplicemente il massimo tra lo shadow rate e il pavimento.
+% r_t=max(r_LB,s_t)
+short_rate_model_pct = max(shadow_rate_vero_pct, r_LB_opt_pct);
+
+figure('Name', 'VERO Shadow Rate (Latente)', 'Position', [100, 100, 800, 500]);
+
+% A. Disegniamo le curve del modello
+plot(dates_monthly, yields_all(:,1), 'k-', 'LineWidth', 1.5); hold on;
+plot(dates_monthly, shadow_rate_vero_pct, 'b-', 'LineWidth', 1.5);
+plot(dates_monthly, short_rate_model_pct, 'r--', 'LineWidth', 1.5);
+
+% B. Linee di riferimento (Pavimento, Zero, e Split Date)
+yline(r_LB_opt_pct, 'g-', 'LineWidth', 2, 'Label', sprintf('Lower Bound (%.0f bps)', r_LB_opt_bps));
+yline(0, 'k:', 'LineWidth', 1); 
+xline(date_split, 'm--', 'LineWidth', 1.5, 'Label', 'Inizio Filtro EKF');
+
+title('VERO Shadow Rate (Fattori EKF) vs Tasso Osservato');
+legend('Tasso Osservato (3M AAA)', 'Shadow Rate Libero (s_t)', ...
+       'Tasso Troncato Modello (max(s_t, r_{LB}))', 'Location', 'best');
+ylabel('Rendimento (%)');
+grid on;
+
+% Sovrapponiamo altre variabili macro cruciali per contestualizzare lo Shadow Rate.
+
+% 1. Il tasso a 10 anni (yields_all(:,8)): mostra come, nonostante i tassi a breve 
+%    fossero bloccati sul pavimento, la BCE usasse il QE per abbassare i tassi a lungo termine.
+plot(dates_monthly, yields_all(:,8), 'Color', [0.5 0.5 0.5], 'LineWidth', 1, 'DisplayName', 'Tasso 10Y AAA');
+
+% 2. ECB Deposit Facility Rate (DFR): Il VERO pavimento politico deciso dalla Banca Centrale.
+%    Confrontarlo con il r_LB_opt (stimato dal modello) ci fa capire quanto "premio di scarsità" 
+%    c'era sui titoli AAA rispetto ai tassi ufficiali.
+ecb_df = readmatrix("ecb_df.xlsx","Range", "B2:B260");
+plot(dates_monthly, squeeze(ecb_df(:)), 'c-', 'LineWidth', 1.5, 'DisplayName', 'ECB DFR');
+
+% 3. Tasso Interbancario a 3 mesi (Euribor/OIS): Il mercato reale senza premio AAA.
+irt3m = readmatrix("irt3m.xlsx","Range", "C144:C402");
+plot(dates_monthly, squeeze(irt3m(:)), 'y-', 'LineWidth', 1.5, 'DisplayName', 'Interbank 3M');
+
+% Nota finale per il grafico:
+legend('show', 'Location', 'southwest');
