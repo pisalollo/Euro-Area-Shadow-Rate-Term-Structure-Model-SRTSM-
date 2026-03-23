@@ -261,14 +261,99 @@ fprintf('r_inf (annualizzato): %.2f%%\n', rinf_opt * 1200);
 %%  4b. ESTRAZIONE PARAMETRI Q E MAPPATURE
 % =========================================================================
 
+fprintf('\n--- Estrazione Matrici Strutturali (Rotazione JSZ) ---\n');
+
+% 1. Ricreo la dinamica nello spazio latente X (Forma Canonica)
+lam = lam_opt; r_inf = rinf_opt; N = 3; n_max = max(maturities);
+K1_X   = diag(lam);
+K0_X   = zeros(N, 1);
+rho1_X = ones(N, 1);
+rho0_X = r_inf;
+
+% 2. Ricalcoliamo le equazioni di Riccati per trovare la matrice di rotazione
+B_tilde = zeros(n_max, N);
+B_tilde(1, :) = -rho1_X';
+for n = 2:n_max
+    B_tilde(n, :) = B_tilde(n-1, :) * (eye(N) + K1_X) - rho1_X';
+end
+
+B_X_obs = zeros(length(maturities), N);
+for i = 1:length(maturities)
+    B_X_obs(i, :) = -B_tilde(maturities(i), :) / maturities(i);
+end
+
+% Matrice di rotazione JSZ (M1) e Sigma ruotata
+M1 = W * B_X_obs;
+Sigma_X = M1 \ Sigma_dec;
+
+A_tilde = zeros(n_max, 1);
+A_tilde(1) = -rho0_X;
+for n = 2:n_max
+    conv_term = 0.5 * (B_tilde(n-1, :) * Sigma_X) * (B_tilde(n-1, :) * Sigma_X)';
+    A_tilde(n) = A_tilde(n-1) + B_tilde(n-1, :) * K0_X + conv_term - rho0_X;
+end
+
+A_X_obs = zeros(length(maturities), 1);
+for i = 1:length(maturities)
+    A_X_obs(i) = -A_tilde(maturities(i)) / maturities(i);
+end
+
+% Vettore di traslazione JSZ (M0)
+M0 = W * A_X_obs;
+
+% 3. ROTAZIONE NELLO SPAZIO OSSERVABILE (Fattori PCA)
+% Matrici K0 e K1 sotto misura Q
+K1_Q = M1 * K1_X / M1;
+%K0_Q = M0 - K1_Q * M0; % Poiché K0_X = 0
+K0_Q = -K1_Q * M0; %fix
+
+% 4. ESTRAZIONE DELL'EQUAZIONE DEL TASSO OMBRA (Short Rate s_t)
+% Il tasso a 1 mese (n=1) definisce s_t. Prendiamo A e B per n=1 nello spazio X.
+A1_X = -A_tilde(1);    % Corrisponde a r_inf
+B1_X = -B_tilde(1, :); % Corrisponde a rho1_X'
+
+% Ruota l'equazione del tasso a 1 mese nello spazio PCA
+rho1 = (B1_X / M1)';
+rho0 = A1_X - B1_X * (M1 \ M0);
+
+fprintf('Parametri estratti con successo\n');
+
+fprintf('\nEquazione shadow rate:\n')
+fprintf('rho0: %.4f (in decimale mensile)\n', rho0)
+fprintf('rho1: %.4f  %.4f  %.4f\n', rho1(1), rho1(2), rho1(3))
+
+% Verifica: il tasso short medio dovrebbe essere vicino alla media del 3M
+shadow_preLB = rho0 + factors_dec * rho1;
+fprintf('Shadow rate medio pre-LB: %.2f%%\n', mean(shadow_preLB) * 1200)
+fprintf('Media yield 3M pre-LB:    %.2f%%\n', mean(yields_preLB(:,1)))
+
 % =========================================================================
 %%  5. RICOSTRUZIONE CURVA E MISURA DEGLI ERRORI
 % =========================================================================
 
-% =========================================================================
-%%  6. GRID SEARCH PER IL LOWER BOUND E ESTRAZIONE STATI LATENTI
-% =========================================================================
+% Ricostruisco la curva per calcolare l'errore di misura (sigma_e)
+[~, Y_hat_dec, A_pca, B_pca] = jsz_obj_function(theta_opt, yields_dec, ...
+                                        factors_dec, maturities, W, Sigma_dec);
 
-% =========================================================================
-%%  7. ESTRAZIONE E PLOT DEL VERO SHADOW RATE (Fattori EKF)
-% =========================================================================
+% Porto le stime in percentuale annualizzata
+Y_hat_pct = Y_hat_dec * 1200; 
+errori_preLB = yields_preLB - Y_hat_pct;
+
+% RMSE per ogni scadenza
+rmse_bps = sqrt(mean(errori_preLB.^2)) * 100;
+fprintf('\nRMSE In-Sample pre-LB (in basis points):\n');
+disp(array2table(rmse_bps, 'VariableNames', {'y3M','y6M','y1Y','y2Y','y3Y','y5Y','y7Y','y10Y'}));
+
+% Volatilità dell'errore di misurazione globale (sigma_e)
+sigma_e_bps = std(errori_preLB(:)) * 100;
+fprintf('Volatilita erore di misura (sigma_e): %.2f bps\n', sigma_e_bps);
+
+% Plot del Fit
+figure;
+plot(maturities, mean(yields_preLB), 'bo-', 'LineWidth', 1.5); hold on;
+plot(maturities, mean(Y_hat_pct), 'r*--', 'LineWidth', 1.5);
+title('Fit Medio della Curva dei Rendimenti (Pre-LB)');
+xlabel('Scadenze (mesi)'); ylabel('Rendimento (%)');
+legend('Curva Osservata', 'Modello JSZ', 'Location', 'best');
+grid on;
+
