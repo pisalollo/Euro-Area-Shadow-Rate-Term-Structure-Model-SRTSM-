@@ -481,13 +481,10 @@ grid on;
 
 % Sovrapponiamo altre variabili macro cruciali per contestualizzare lo Shadow Rate.
 
-% 1. Il tasso a 10 anni (yields_all(:,8)): mostra come, nonostante i tassi a breve 
-%    fossero bloccati sul pavimento, la BCE usasse il QE per abbassare i tassi a lungo termine.
+% 1. Il tasso a 10 anni (yields_all(:,8))
 plot(dates_monthly, yields_all(:,8), 'Color', [0.5 0.5 0.5], 'LineWidth', 1, 'DisplayName', 'Tasso 10Y AAA');
 
-% 2. ECB Deposit Facility Rate (DFR): Il VERO pavimento politico deciso dalla Banca Centrale.
-%    Confrontarlo con il r_LB_opt (stimato dal modello) ci fa capire quanto "premio di scarsità" 
-%    c'era sui titoli AAA rispetto ai tassi ufficiali.
+% 2. ECB Deposit Facility Rate (DFR)
 ecb_df = readmatrix("ecb_df.xlsx","Range", "B2:B260");
 plot(dates_monthly, squeeze(ecb_df(:)), 'c-', 'LineWidth', 1.5, 'DisplayName', 'ECB DFR');
 
