@@ -14,8 +14,6 @@ The architecture is built upon three foundational papers in term structure model
 ## Current Features
 - **PCA Factor Extraction**: Demeaning and extraction of Level, Slope, and Curvature factors from the pre-LB period.
 - **Maximum Likelihood Estimation (MLE)**: Cross-sectional optimization of JSZ structural parameters.
-- **Grid Search for ELB**: Automated grid search maximizing the log-likelihood of the EKF to estimate the market-perceived lower bound.
-- **Out-of-Sample Forecasting (Zero Look-Ahead Bias)**: A dedicated module to compute the market-implied "Lift-off" timing (e.g., crossing the 25 bps threshold). The VAR ($\mathbb{P}$-dynamics) and ELB are re-estimated on strictly out-of-sample truncated data to simulate real-world trading desk forecasting.
 
 ## Data
 Currently, the model runs on the **Euro Area AAA Government Yield Curve** (maturities: 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y). 
@@ -23,9 +21,11 @@ Currently, the model runs on the **Euro Area AAA Government Yield Curve** (matur
 
 ## Work In Progress / Future Steps
 This is an active research project. Upcoming implementations include:
+- [ ] **Grid Search for ELB**: Automated grid search maximizing the log-likelihood of the EKF to estimate the market-perceived lower bound.
+- [ ] **Out-of-Sample Forecasting (Zero Look-Ahead Bias)**: A dedicated module to compute the market-implied "Lift-off" timing (e.g., crossing the 25 bps threshold). The VAR ($\mathbb{P}$-dynamics) and ELB are re-estimated on strictly out-of-sample truncated data to simulate real-world trading desk forecasting.
 - [ ] **OIS/€STR Integration**: Replacing AAA yields with the EONIA/€STR swapped curve to strip out sovereign scarcity premia and exactly replicate Lemke-Vladu's dataset.
 - [ ] **Time-Varying Lower Bound**: Linking the ELB dynamically to the ECB's Deposit Facility Rate (DFR) rather than estimating a single historical floor.
 - [ ] **Term Premia Decomposition**: Extracting forward term premia decoupled from the ZLB asymmetry.
 
 ## How to Run
-Run the main script `main.m`. The script is modularized into distinct blocks (Data Loading, JSZ Estimation, EKF Filtering, OOS Forecasting).
+Run the main script `main.m`. The script is modularized into distinct blocks (Data Loading, JSZ Estimation, EKF Filtering\*, OOS Forecasting\*).
