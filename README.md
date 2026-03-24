@@ -23,7 +23,7 @@ Currently, the model runs on the **Euro Area AAA Government Yield Curve** (matur
 
 ## Work In Progress / Future Steps
 This is an active research project. Upcoming implementations include:
-- [ ] **Grid Search for ELB**: Automated grid search maximizing the log-likelihood of the EKF to estimate the market-perceived lower bound.
+- [x] **Grid Search for ELB**: Automated grid search maximizing the log-likelihood of the EKF to estimate the market-perceived lower bound.
 - [ ] **Out-of-Sample Forecasting (Zero Look-Ahead Bias)**: A dedicated module to compute the market-implied "Lift-off" timing (e.g., crossing the 25 bps threshold). 
 - [ ] **OIS/€STR Integration**: Replacing AAA yields with the EONIA/€STR swapped curve to strip out sovereign scarcity premia and exactly replicate Lemke-Vladu's dataset.
 - [ ] **Time-Varying Lower Bound**: Linking the ELB dynamically to the ECB's Deposit Facility Rate (DFR) rather than estimating a single historical floor.
