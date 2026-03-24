@@ -84,3 +84,10 @@ To ensure the model's empirical robustness, a **grid search optimization** was p
 #### Conditional Lower Bound Logic
 A critical feature of this implementation is the handling of the normalization phase. The time-varying lower bound is constrained as follows:
 $$LB_t = \min(DFR_t - \Delta, 0)$$
+
+This specification allows the model to:
+1. **Capture non-linearities** during the ELB era (2014-2022), where the floor tracks the policy rate.
+2. **Smoothly revert** to a standard linear Gaussian ATSM as the Eurosystem entered the normalization phase in 2022. 
+
+#### Robustness Check: Fixed vs. Variable LB
+The estimated shadow rate shows remarkable consistency across both specifications. The high correlation between the fixed-rate model and the policy-linked model reinforces the reliability of the latent factor extraction, even during periods of high volatility in the long-end of the yield curve.
