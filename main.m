@@ -18,6 +18,8 @@ data    = readmatrix("data/aaa_yelds_curve.xlsx",       "Range", "C16:J5520");
 dates_str = readcell("data/aaa_yelds_curve.xlsx", "Range", "A16:A5520");
 dates_all = datetime(dates_str, 'InputFormat', 'yyyy-MM-dd');
 
+ecb_df = readmatrix("ecb_df.xlsx","Range", "B2:B260"); %deposit facility rate
+
 
 T = timetable(dates_all, data(:,1), data(:,2), data(:,3), data(:,4), ...
               data(:,5), data(:,6), data(:,7), data(:,8), ...
@@ -367,7 +369,7 @@ fprintf('\n--- Inizio Grid Search per r_LB (Scala Decimale Mensile) ---\n');
 % 1. Convertiamo in Decimale Mensile TUTTI gli input del filtro
 yields_LB_dec = yields_LB / 1200; %Yields_LB
 
-r_LB_grid_bps = -120:10:0; %il Deposit Facility rate storicamente è sceso sotto lo zero in area euro, escludo quindi che il lower bound sia positivo 
+r_LB_grid_bps = -120:5:0; %il Deposit Facility rate storicamente è sceso sotto lo zero in area euro, escludo quindi che il lower bound sia positivo 
 r_LB_grid_dec = (r_LB_grid_bps / 10000) / 12;
 
 sigma_e_dec = sigma_e_bps / 10000 / 12; 
@@ -438,10 +440,10 @@ grid on;
 %                Phi_P, Sigma_dec, K0_Q, K1_Q, rho0, rho1, r_LB_opt_dec, maturities, R_mat_dec);
 
 % =========================================================================
-%%  7. ESTRAZIONE E PLOT DEL VERO SHADOW RATE (Fattori EKF)
+%%  7. ESTRAZIONE E PLOT DELLO SHADOW RATE (Fattori EKF)
 % =========================================================================
 
-fprintf('\n--- Estrazione e Plot del VERO Shadow Rate (Fattori Latenti) ---\n');
+fprintf('\n--- Estrazione e Plot dello Shadow Rate (Fattori Latenti) ---\n');
 
 % Splicing fattori: unione dei fattori in decimale, pre LB e post LB
 % estratti dal filtro
@@ -456,6 +458,9 @@ shadow_rate_vero_dec = rho0 + P_history_true_dec * rho1;
 % Riconverto alla fine in percentuale per il grafico
 shadow_rate_vero_pct = shadow_rate_vero_dec * 1200;
 r_LB_opt_pct = r_LB_opt_bps / 100;
+
+%save from workspace as file
+shadow_rate_one_lb_sep2004_mar2026=shadow_rate_vero_pct;
 
 % Il tasso "fisico" (modello) è semplicemente il massimo tra lo shadow rate e il pavimento.
 % r_t=max(r_LB,s_t)
@@ -485,7 +490,6 @@ grid on;
 plot(dates_monthly, yields_all(:,8), 'Color', [0.5 0.5 0.5], 'LineWidth', 1, 'DisplayName', '10Y AAA');
 
 % 2. ECB Deposit Facility Rate (DFR)
-ecb_df = readmatrix("ecb_df.xlsx","Range", "B2:B260");
 plot(dates_monthly, squeeze(ecb_df(:)), 'c-', 'LineWidth', 1.5, 'DisplayName', 'ECB DFR');
 
 % 3. Tasso Interbancario a 3 mesi (Euribor/OIS): Il mercato reale senza premio AAA.
@@ -494,3 +498,167 @@ plot(dates_monthly, squeeze(irt3m(:)), 'y-', 'LineWidth', 1.5, 'DisplayName', 'I
 
 % Nota finale per il grafico:
 legend('show', 'Location', 'southwest');
+
+% =========================================================================
+%  ALTERNATIVE VERSION TIME VARIYING
+% =========================================================================
+
+
+% =========================================================================
+%%  6. (ALTERNATIVO TV) GRID SEARCH PER SPREAD SU LOWER BOUND TIME-VARYING
+% =========================================================================
+fprintf('\n--- Inizio Grid Search per Spread r_LB (Time-Varying) ---\n');
+
+% 1. Caricamento e allineamento del Tasso Ufficiale BCE (DFR)
+% Assumiamo che ecb_df sia allineato con dates_monthly.
+% Estraiamo solo la porzione che corrisponde al periodo Lower Bound (yields_LB)
+idx_preLB = sum(dates_monthly <= date_split);
+ecb_df_LB = ecb_df(idx_preLB+1 : end); 
+
+% 2. Convertiamo gli input in Decimale Mensile
+yields_LB_dec = yields_LB / 1200; 
+ecb_df_LB_dec = (ecb_df_LB / 100) / 12; % DFR in decimale mensile
+
+% 3. Definiamo la Grid Search sullo SPREAD (in basis points)
+% Invece di un tasso fisso, cerchiamo lo spread: quanto scendono i tassi AAA 
+% sotto il tasso ufficiale BCE? (es. da 0 a 80 bps sotto il DFR)
+%s pread_grid_bps = 0:10:80; 
+spread_grid_bps = 0:5:80; 
+% letting spread from 0 to 80 cause shadow rate never goes under the LB,
+% frocing it to stay in the interval between 0 and 15 (the valued found in the working paper)
+spread_grid_dec = (spread_grid_bps / 10000) / 12;
+
+sigma_e_dec = sigma_e_bps / 10000 / 12; 
+R_mat_dec = eye(length(maturities)) * (sigma_e_dec^2);
+logL_results = zeros(length(spread_grid_bps), 1);
+
+% Parametri P in scala decimale (fix)
+Phi_P = A_AR;   
+mu_P_dec  = KP0 / 1200; 
+
+% Stati iniziali rigorosamente in decimale
+P_init_dec = factors_all(idx_preLB, :)' / 1200; 
+V_init = eye(3) * 1e-3; % 1e-3 è un'ottima tolleranza standard per l'incertezza iniziale
+
+% 4. Lanciamo il ciclo sulla funzione EKF Time-Varying
+for i = 1:length(spread_grid_bps)
+    current_spread_dec = spread_grid_dec(i);
+    
+    % Creiamo il vettore Lower Bound per questo test: DFR(t) - Spread
+    r_LB_vec_test = ecb_df_LB_dec - current_spread_dec;
+
+    % CONCEPTUAL NOTE: The ELB (Effective Lower Bound) is dynamically linked to the 
+    % ECB Deposit Facility Rate only in negative territory. During normal/lift-off 
+    % regimes (DFR > 0), Hence, it does make sense to cap the theoretical LB at zero or setting to .
+    %r_LB_vec_test = min(r_LB_opt_pct, r_LB_vec_test);
+    r_LB_vec_test = min(0, r_LB_vec_test);
+    
+    fprintf('Testando Spread = %2d bps sotto il DFR... ', spread_grid_bps(i));
+    
+    % Chiamiamo la nuova funzione TV!
+    [logL, ~] = latent_run_EKF_shadow_TV(yields_LB_dec, P_init_dec, V_init, mu_P_dec, ...
+                Phi_P, Sigma_dec, K0_Q, K1_Q, rho0, rho1, r_LB_vec_test, maturities, R_mat_dec);
+                        
+    logL_results(i) = logL;
+    fprintf('Log-Likelihood: %.4f\n', logL);
+end
+
+% 5. Estrazione Ottimo
+[~, idx_opt] = max(logL_results);
+spread_opt_bps = spread_grid_bps(idx_opt);
+spread_opt_dec = spread_grid_dec(idx_opt); 
+
+% Creiamo il vettore Lower Bound ottimale finale
+r_LB_vec_opt_dec = ecb_df_LB_dec - spread_opt_dec;
+r_LB_vec_opt_dec = min(0, r_LB_vec_opt_dec);
+
+fprintf('\n=== RISULTATO OTTIMIZZAZIONE LOWER BOUND (TIME-VARYING) ===\n');
+fprintf('Il premio di scarsità AAA (Spread ottimale) stimato è: %d bps sotto il DFR\n', spread_opt_bps);
+fprintf('\nRicalcolo l''EKF TV con il vettore Lower Bound ottimale...\n');
+
+% 6. Ricalcolo finale per estrarre gli stati latenti
+[~, P_latenti_ottimali_dec] = latent_run_EKF_shadow_TV(yields_LB_dec, P_init_dec, V_init, mu_P_dec, ...
+                Phi_P, Sigma_dec, K0_Q, K1_Q, rho0, rho1, r_LB_vec_opt_dec, maturities, R_mat_dec);
+
+% 7. Plot diagnostico
+figure('Name', 'Log-Likelihood Spread r_LB (TV)');
+plot(spread_grid_bps, logL_results, 'bo-', 'MarkerFaceColor', 'b');
+xline(spread_opt_bps, 'r--', 'LineWidth', 1.5);
+title('Log-Likelihood al variare dello Spread (AAA vs DFR)');
+xlabel('Spread dal DFR (basis points)'); ylabel('Log-likelihood');
+grid on;
+
+% =========================================================================
+%%  7. (TV-LB) ESTRAZIONE E PLOT DEL VERO SHADOW RATE (Fattori EKF)
+% =========================================================================
+fprintf('\n--- Estrazione e Plot del VERO Shadow Rate (Time-Varying LB) ---\n');
+
+% 1. Splicing fattori: unione dei fattori in decimale (pre LB e post LB estratti dal filtro)
+factors_preLB_dec = factors_all(1:idx_preLB, :) / 1200; 
+P_history_true_dec = [factors_preLB_dec; P_latenti_ottimali_dec];
+
+% 2. Calcoliamo lo shadow rate in decimale (s_t = rho0 + rho1 * P_t)
+shadow_rate_vero_dec = rho0 + P_history_true_dec * rho1;
+
+% Riconverto alla fine in percentuale per il grafico
+shadow_rate_vero_pct = shadow_rate_vero_dec * 1200;
+
+%save from workspace as file
+shadow_rate_TV_lb_sep2004_mar2026=shadow_rate_vero_pct;
+
+% 3. CREAZIONE DEL LOWER BOUND DINAMICO (SCALINATA STORICA)
+% Il pavimento per l'intera storia è il tasso BCE (DFR) meno lo spread ottimale stimato.
+% Assumiamo ecb_df sia un vettore colonna (T x 1)
+r_LB_full_pct = ecb_df(:) - (spread_opt_bps / 100);
+
+% Il tasso "fisico" (modello) è il massimo tra lo shadow rate e il pavimento di quel mese.
+% r_t = max(s_t, LB_t) calcolato elemento per elemento
+short_rate_model_pct = max(shadow_rate_vero_pct, r_LB_full_pct);
+
+figure('Name', 'Shadow Rate (Time-Varying Latent)', 'Position', [100, 100, 900, 550]);
+
+% A. Disegniamo le curve del modello
+plot(dates_monthly, yields_all(:,1), 'k-', 'LineWidth', 1.5, 'DisplayName', 'Observed Rate (3M AAA)'); hold on;
+plot(dates_monthly, shadow_rate_vero_pct, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Shadow Rate (s_t)');
+
+% B. LB_t varying time
+plot(dates_monthly, r_LB_full_pct, 'g-', 'LineWidth', 2, ...
+     'DisplayName', sprintf('Time-Varying LB (DFR - %d bps)', spread_opt_bps));
+
+% C. Linee di riferimento statiche (Zero e Split Date)
+yline(0, 'k:', 'LineWidth', 1, 'HandleVisibility', 'off'); % HandleVisibility off nasconde la riga dalla legenda
+xline(date_split, 'm--', 'LineWidth', 1.5, 'Label', 'Inizio Filtro EKF', 'HandleVisibility', 'off');
+
+title('Shadow Rate (EKF) vs Observed Rate with Time-Varying Lower Bound');
+ylabel('Rendimento (%)');
+grid on;
+
+% 1. Il tasso a 10 anni (yields_all(:,8))
+plot(dates_monthly, yields_all(:,8), 'Color', [0.5 0.5 0.5], 'LineWidth', 1, 'DisplayName', '10Y AAA');
+
+% 2. ECB Deposit Facility Rate (DFR) puro
+plot(dates_monthly, ecb_df(:), 'c-', 'LineWidth', 1.5, 'DisplayName', 'ECB DFR');
+
+% 3. Tasso Interbancario a 3 mesi (Euribor/OIS)
+irt3m = readmatrix("irt3m.xlsx", "Range", "C144:C402");
+plot(dates_monthly, irt3m(:), 'y-', 'LineWidth', 1.5, 'DisplayName', 'Interbank 3M');
+
+% r_t=max(s_t,LB_t)
+plot(dates_monthly, short_rate_model_pct, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Model Rate (max(s_t, LB_t))');
+
+% legenda
+legend('show', 'Location', 'southwest', 'NumColumns', 2);
+
+%https://www.ecb.europa.eu/mopo/implement/app/html/index.en.html
+
+% =========================================================================
+%%  8. COMPARISON
+% =========================================================================
+
+figure
+title('Shadow Rate ONE LB vs Time-Varying Lower Bound');
+plot(dates_monthly, shadow_rate_one_lb_sep2004_mar2026, 'b-', 'LineWidth', 1.5, 'DisplayName', 'Shadow Rate (s_t)'); hold on;
+plot(dates_monthly, shadow_rate_TV_lb_sep2004_mar2026, 'r-', 'LineWidth', 1.5, 'DisplayName', 'Shadow Rate TV (s_t)');
+
+% legenda
+legend('show', 'Location', 'northeast', 'NumColumns', 2);
