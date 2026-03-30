@@ -59,7 +59,7 @@ This is an active research project. Upcoming implementations include:
 - [x] **Grid Search for ELB**: Automated grid search maximizing the log-likelihood of the EKF to estimate the market-perceived lower bound.
 - [ ] **Out-of-Sample Forecasting (Zero Look-Ahead Bias)**: A dedicated module to compute the market-implied "Lift-off" timing (e.g., crossing the 25 bps threshold).
 - [ ] **OIS/€STR Integration**: Replacing AAA yields with the EONIA/€STR swapped curve to strip out sovereign scarcity premia and exactly replicate Lemke-Vladu's dataset.
-- [ ] **Time-Varying Lower Bound**: Linking the ELB dynamically to the ECB's Deposit Facility Rate (DFR) rather than estimating a single historical floor.
+- [x] **Time-Varying Lower Bound (WIP)**: Linking the ELB dynamically to the ECB's Deposit Facility Rate (DFR) rather than estimating a single historical floor.
 
 ## How to Run
 Run the main script `main.m`. The script is modularized into distinct blocks (Data Loading, JSZ Estimation, EKF Filtering*, OOS Forecasting*).
